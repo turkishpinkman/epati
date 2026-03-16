@@ -1,8 +1,23 @@
+const HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'OPTIONS, POST'
+};
+
 exports.handler = async function (event, context) {
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 200,
+            headers: HEADERS,
+            body: ''
+        };
+    }
+
     // Sadece POST isteklerine izin ver
     if (event.httpMethod !== 'POST') {
         return {
             statusCode: 405,
+            headers: HEADERS,
             body: JSON.stringify({ error: 'Method Not Allowed' })
         };
     }
@@ -19,6 +34,7 @@ exports.handler = async function (event, context) {
             console.error('Missing Telegram Bot Token or Chat ID');
             return {
                 statusCode: 500,
+                headers: HEADERS,
                 body: JSON.stringify({ error: 'Server configuration error' })
             };
         }
@@ -45,18 +61,21 @@ exports.handler = async function (event, context) {
             console.error('Telegram API Error:', errorData);
             return {
                 statusCode: 502,
+                headers: HEADERS,
                 body: JSON.stringify({ error: 'Failed to send message to Telegram', details: errorData })
             };
         }
 
         return {
             statusCode: 200,
+            headers: HEADERS,
             body: JSON.stringify({ success: true, message: 'Message sent via Telegram.' })
         };
     } catch (error) {
         console.error('Function execution error:', error.message);
         return {
             statusCode: 500,
+            headers: HEADERS,
             body: JSON.stringify({ error: 'Internal Server Error', details: error.message })
         };
     }
