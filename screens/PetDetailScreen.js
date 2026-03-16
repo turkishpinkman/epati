@@ -13,7 +13,7 @@ import { getTelegramFileUrl } from '../utils/telegram';
 import GlassBackground from '../components/GlassBackground';
 import GlassPanel from '../components/GlassPanel';
 import QRIDCard from '../components/QRIDCard';
-import { setLastActivePet } from '../App';
+import { setLastActivePet } from '../utils/activePet';
 
 export default function PetDetailScreen({ navigation, route }) {
     const { petId } = route.params;

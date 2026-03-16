@@ -1,0 +1,15 @@
+{
+  "account": {
+    "Email": "gokalpavci3548@gmail.com",
+    "Teams": [
+      "kararrrrrr’s team"
+    ]
+  },
+  "siteData": {
+    "site-name": "epati-app",
+    "config-path": "C:\\Users\\Gökalp\\Desktop\\epati\\netlify.toml",
+    "admin-url": "https://app.netlify.com/projects/epati-app",
+    "site-url": "https://epati-app.netlify.app",
+    "site-id": "cf6af496-ff9a-4d82-b4bd-3b6f008c63cd"
+  }
+}

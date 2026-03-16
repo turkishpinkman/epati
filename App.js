@@ -15,15 +15,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { _resetUserId } from './utils/storage';
-
-// Global son aktif pet bilgisi
-let _lastActivePet = null;
-export function setLastActivePet(petId, petName) {
-    _lastActivePet = { petId, petName };
-}
-export function getLastActivePet() {
-    return _lastActivePet;
-}
+import { getLastActivePet } from './utils/activePet';
 
 import AuthScreen from './screens/AuthScreen';
 import HomeScreen from './screens/HomeScreen';
@@ -35,6 +27,9 @@ import WeightScreen from './screens/WeightScreen';
 import NutritionScreen from './screens/NutritionScreen';
 import PhotoGalleryScreen from './screens/PhotoGalleryScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import AdoptionFeedScreen from './screens/AdoptionFeedScreen';
+import AdoptionDetailScreen from './screens/AdoptionDetailScreen';
+import CreateAdoptionScreen from './screens/CreateAdoptionScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -65,6 +60,26 @@ function HomeTab() {
                 options={({ route }) => ({ title: `${route.params?.petName || ''} — Beslenme` })} />
             <Stack.Screen name="PhotoGallery" component={PhotoGalleryScreen}
                 options={({ route }) => ({ title: `${route.params?.petName || ''} — Galeri` })} />
+        </Stack.Navigator>
+    );
+}
+
+function AdoptionTab() {
+    const { colors } = useTheme();
+    return (
+        <Stack.Navigator screenOptions={{
+            headerStyle: { backgroundColor: 'transparent' },
+            headerTintColor: '#FFFFFF',
+            headerTitleStyle: { fontWeight: '700', fontSize: 18 },
+            headerShadowVisible: false,
+            headerTransparent: true,
+            contentStyle: { backgroundColor: 'transparent' },
+            animation: 'slide_from_right',
+        }}>
+            <Stack.Screen name="AdoptionFeed" component={AdoptionFeedScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AdoptionDetail" component={AdoptionDetailScreen} options={{ title: 'İlan Detayı' }} />
+            <Stack.Screen name="CreateAdoption" component={CreateAdoptionScreen}
+                options={({ route }) => ({ title: 'Yeni Yuva İlanı', presentation: 'modal', headerTransparent: true, headerStyle: { backgroundColor: 'transparent' } , headerTintColor: '#FFFFFF' })} />
         </Stack.Navigator>
     );
 }
@@ -293,8 +308,8 @@ function FloatingTabBar({ state, descriptors, navigation }) {
                             );
                         }
 
-                        const iconName = route.name === 'HomeTab' ? 'paw' : 'cog';
-                        const label = route.name === 'HomeTab' ? 'Petlerim' : 'Ayarlar';
+                        const iconName = route.name === 'HomeTab' ? 'paw' : route.name === 'AdoptionTab' ? 'home-heart' : 'cog';
+                        const label = route.name === 'HomeTab' ? 'Petlerim' : route.name === 'AdoptionTab' ? 'Sahiplen' : 'Ayarlar';
 
                         return (
                             <TouchableOpacity
@@ -423,6 +438,8 @@ function MainTabs() {
         >
             <Tab.Screen name="HomeTab" component={HomeTab}
                 options={{ tabBarLabel: 'Petlerim' }} />
+            <Tab.Screen name="AdoptionTab" component={AdoptionTab}
+                options={{ tabBarLabel: 'Sahiplen' }} />
             <Tab.Screen name="AddAction" component={DummyScreen}
                 options={{
                     tabBarLabel: '',

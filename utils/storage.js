@@ -228,3 +228,42 @@ export const addGalleryPhoto = async (petId, uri) => {
     return addToSubCollection(petId, 'gallery', { telegramFileId: fileId, name: `photo_${Date.now()}.jpg`, uploadedAt: new Date().toISOString() });
 };
 export const deleteGalleryPhoto = (petId, id) => deleteFromSubCollection(petId, 'gallery', id);
+
+// Sahiplendirme İlanları
+export const addAdoption = async (adoptionData) => {
+    try {
+        const uid = await waitForUser();
+        let photoUrls = [];
+        if (adoptionData.photos && adoptionData.photos.length > 0) {
+            for (let uri of adoptionData.photos) {
+                const url = await uploadImage(uri);
+                if (url) photoUrls.push(url);
+            }
+        }
+
+        const col = collection(db, 'adoptions');
+        const docRef = await addDoc(col, {
+            ...adoptionData,
+            photos: photoUrls,
+            ownerId: uid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        });
+        return { id: docRef.id, ...adoptionData, photos: photoUrls, ownerId: uid };
+    } catch (error) {
+        console.error('İlan eklenirken hata:', error);
+        throw error;
+    }
+};
+
+export const loadAdoptions = async () => {
+    try {
+        const col = collection(db, 'adoptions');
+        const q = query(col, orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (error) {
+        console.error('İlanlar yüklenirken hata:', error);
+        return [];
+    }
+};
