@@ -58,8 +58,8 @@ export default function AdoptionDetailScreen({ route, navigation }) {
 
         setSending(true);
         try {
-            // TODO: Netlify function call for Telegram bot messaging
-            const response = await fetch('https://epati-app.netlify.app/.netlify/functions/adoption-chat', {
+            // Netlify function call for Telegram bot messaging
+            const response = await fetch('https://euphonious-kulfi-a5ae3a.netlify.app/.netlify/functions/adoption-chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -73,8 +73,8 @@ export default function AdoptionDetailScreen({ route, navigation }) {
             });
 
             if (!response.ok) {
-                // Ignore for now since function is not deployed
-                console.warn('Backend function not ready yet.');
+                const errData = await response.text();
+                throw new Error(`Sunucu Hatası: ${response.status}\nDetay: ${errData}`);
             }
 
             Alert.alert('Başarılı', 'Mesajınız "epati chat" üzerinden ilan sahibine iletildi!');
@@ -82,10 +82,7 @@ export default function AdoptionDetailScreen({ route, navigation }) {
             setMessageText('');
         } catch (error) {
             console.error('Mesaj gönderme hatası:', error);
-            // Ignore error for now during development
-            Alert.alert('Başarılı', 'Mesajınız "epati chat" üzerinden gönderildi (Dev mode).');
-            setMessageModalVisible(false);
-            setMessageText('');
+            Alert.alert('Hata', `Mesaj gönderilemedi: ${error.message}`);
         } finally {
             setSending(false);
         }
