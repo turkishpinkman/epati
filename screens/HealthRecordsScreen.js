@@ -1,14 +1,18 @@
-// HealthRecordsScreen.js — Sağlık Kayıtları
-import React, { useState, useCallback } from 'react';
+// HealthRecordsScreen.js — Sağlık Kayıtları (Liquid Glass)
+import React, { useState, useCallback, useEffect } from 'react';
 import {
     View, Text, FlatList, TouchableOpacity, TextInput,
-    StyleSheet, Modal, Alert
+    StyleSheet, Modal, Alert, ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, SPACING, RADIUS } from '../utils/theme';
-import { loadPets, addHealthRecord, deleteHealthRecord } from '../utils/storage';
+import { loadHealthRecords, addHealthRecord, deleteHealthRecord } from '../utils/storage';
+import DatePickerInput from '../components/DatePickerInput';
+import { parseDateString, formatDateString } from '../utils/dateHelpers';
+import GlassBackground from '../components/GlassBackground';
+import GlassPanel from '../components/GlassPanel';
 
 const CATEGORIES = [
     { key: 'veteriner', label: 'Veteriner Ziyareti', icon: 'hospital-building', color: '#3498DB' },
@@ -17,7 +21,7 @@ const CATEGORIES = [
     { key: 'genel', label: 'Genel Not', icon: 'note-text', color: '#7F8C8D' },
 ];
 
-export default function HealthRecordsScreen({ route }) {
+export default function HealthRecordsScreen({ route, navigation }) {
     const { petId, petName } = route.params;
     const { colors, shadows } = useTheme();
     const [records, setRecords] = useState([]);
@@ -25,17 +29,23 @@ export default function HealthRecordsScreen({ route }) {
     const [form, setForm] = useState({ title: '', date: '', category: 'veteriner', notes: '' });
 
     const fetchData = async () => {
-        const pets = await loadPets();
-        const pet = pets.find(p => p.id === petId);
-        if (pet) {
-            const sorted = [...(pet.healthRecords || [])].sort((a, b) =>
-                new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt)
-            );
-            setRecords(sorted);
-        }
+        const data = await loadHealthRecords(petId);
+        const sorted = [...data].sort((a, b) => {
+            const dateA = a.date ? parseDateString(a.date) : new Date(a.createdAt);
+            const dateB = b.date ? parseDateString(b.date) : new Date(b.createdAt);
+            return (dateB || new Date(0)) - (dateA || new Date(0));
+        });
+        setRecords(sorted);
     };
 
     useFocusEffect(useCallback(() => { fetchData(); }, [petId]));
+
+    useEffect(() => {
+        if (route.params?.openModal) {
+            setModalVisible(true);
+            if (navigation.setParams) navigation.setParams({ openModal: false });
+        }
+    }, [route.params?.openModal]);
 
     const handleAdd = async () => {
         if (!form.title.trim()) { Alert.alert('Hata', 'Başlık girin.'); return; }
@@ -53,131 +63,138 @@ export default function HealthRecordsScreen({ route }) {
     };
 
     const getCategoryInfo = (key) => CATEGORIES.find(c => c.key === key) || CATEGORIES[3];
-    const s = makeStyles(colors, shadows);
 
     return (
-        <SafeAreaView style={[s.container, { backgroundColor: colors.background }]} edges={['bottom']}>
-            <View style={s.categoryRow}>
-                {CATEGORIES.map(cat => (
-                    <View key={cat.key} style={[s.categoryCard, { backgroundColor: cat.color + '10' }]}>
-                        <MaterialCommunityIcons name={cat.icon} size={20} color={cat.color} />
-                        <Text style={[s.categoryCount, { color: cat.color }]}>
-                            {records.filter(r => r.category === cat.key).length}
-                        </Text>
-                    </View>
-                ))}
-            </View>
-
-            <FlatList
-                data={records}
-                renderItem={({ item }) => {
-                    const cat = getCategoryInfo(item.category);
-                    return (
-                        <View style={[s.card, { backgroundColor: colors.surface }, shadows.small]}>
-                            <View style={[s.cardIcon, { backgroundColor: cat.color + '15' }]}>
-                                <MaterialCommunityIcons name={cat.icon} size={24} color={cat.color} />
+        <GlassBackground>
+            <SafeAreaView style={s.container} edges={['bottom']}>
+                <View style={{ height: 60 }} />
+                {/* Kategori Özet */}
+                <View style={s.categoryRow}>
+                    {CATEGORIES.map(cat => (
+                        <GlassPanel key={cat.key} borderRadius={RADIUS.md} style={s.categoryCardOuter} noPadding>
+                            <View style={s.categoryCardInner}>
+                                <MaterialCommunityIcons name={cat.icon} size={20} color={cat.color} />
+                                <Text style={[s.categoryCount, { color: cat.color }]}>
+                                    {records.filter(r => r.category === cat.key).length}
+                                </Text>
                             </View>
-                            <View style={s.cardContent}>
-                                <View style={s.cardHeader}>
-                                    <Text style={[s.cardTitle, { color: colors.text }]}>{item.title}</Text>
-                                    <TouchableOpacity onPress={() => handleDelete(item.id, item.title)}>
-                                        <MaterialCommunityIcons name="close-circle" size={20} color={colors.textLight} />
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={s.cardMeta}>
-                                    <View style={[s.categoryBadge, { backgroundColor: cat.color + '15' }]}>
-                                        <Text style={[s.categoryText, { color: cat.color }]}>{cat.label}</Text>
+                        </GlassPanel>
+                    ))}
+                </View>
+
+                <FlatList
+                    data={records}
+                    renderItem={({ item }) => {
+                        const cat = getCategoryInfo(item.category);
+                        return (
+                            <GlassPanel borderRadius={RADIUS.lg} style={s.cardOuter} noPadding>
+                                <View style={s.cardInner}>
+                                    <View style={[s.cardIcon, { backgroundColor: cat.color + '25' }]}>
+                                        <MaterialCommunityIcons name={cat.icon} size={24} color={cat.color} />
                                     </View>
-                                    {item.date ? <Text style={[s.dateText, { color: colors.textSecondary }]}>{item.date}</Text> : null}
+                                    <View style={s.cardContent}>
+                                        <View style={s.cardHeader}>
+                                            <Text style={s.cardTitle}>{item.title}</Text>
+                                            <TouchableOpacity onPress={() => handleDelete(item.id, item.title)}>
+                                                <MaterialCommunityIcons name="close-circle" size={20} color="rgba(255,255,255,0.4)" />
+                                            </TouchableOpacity>
+                                        </View>
+                                        <View style={s.cardMeta}>
+                                            <View style={[s.categoryBadge, { backgroundColor: cat.color + '25' }]}>
+                                                <Text style={[s.categoryText, { color: cat.color }]}>{cat.label}</Text>
+                                            </View>
+                                            {item.date ? <Text style={s.dateText}>{item.date}</Text> : null}
+                                        </View>
+                                        {item.notes ? <Text style={s.notesText}>{item.notes}</Text> : null}
+                                    </View>
                                 </View>
-                                {item.notes ? <Text style={[s.notesText, { color: colors.textSecondary }]}>{item.notes}</Text> : null}
-                            </View>
+                            </GlassPanel>
+                        );
+                    }}
+                    keyExtractor={item => item.id}
+                    contentContainerStyle={s.listContent}
+                    ListEmptyComponent={
+                        <View style={s.emptyContainer}>
+                            <MaterialCommunityIcons name="clipboard-pulse" size={48} color="rgba(255,255,255,0.3)" />
+                            <Text style={s.emptyText}>Henüz sağlık kaydı yok</Text>
                         </View>
-                    );
-                }}
-                keyExtractor={item => item.id}
-                contentContainerStyle={s.listContent}
-                ListEmptyComponent={
-                    <View style={s.emptyContainer}>
-                        <MaterialCommunityIcons name="clipboard-pulse" size={48} color={colors.textLight} />
-                        <Text style={[s.emptyText, { color: colors.textLight }]}>Henüz sağlık kaydı yok</Text>
-                    </View>
-                }
-                showsVerticalScrollIndicator={false}
-            />
+                    }
+                    showsVerticalScrollIndicator={false}
+                />
 
-            <TouchableOpacity style={[s.fab, { backgroundColor: colors.info }, shadows.large]} onPress={() => setModalVisible(true)}>
-                <MaterialCommunityIcons name="plus" size={28} color="#FFF" />
-            </TouchableOpacity>
 
-            <Modal visible={modalVisible} animationType="slide" transparent>
-                <View style={s.modalOverlay}>
-                    <View style={[s.modalContent, { backgroundColor: colors.surface }]}>
-                        <View style={s.modalHeader}>
-                            <Text style={[s.modalTitle, { color: colors.text }]}>Yeni Sağlık Kaydı</Text>
-                            <TouchableOpacity onPress={() => setModalVisible(false)}>
-                                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
+                <Modal visible={modalVisible} animationType="slide" transparent>
+                    <View style={s.modalOverlay}>
+                        <View style={[s.modalContent, { backgroundColor: 'rgba(30,30,50,0.95)' }]}>
+                            <View style={s.modalHeader}>
+                                <Text style={[s.modalTitle, { color: '#FFFFFF' }]}>Yeni Sağlık Kaydı</Text>
+                                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                                    <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
+                                </TouchableOpacity>
+                            </View>
+                            <ScrollView>
+                                <Text style={[s.modalLabel, { color: 'rgba(255,255,255,0.7)' }]}>Kategori</Text>
+                                <View style={s.catGrid}>
+                                    {CATEGORIES.map(cat => (
+                                        <TouchableOpacity key={cat.key}
+                                            style={[s.catChip, { borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'rgba(255,255,255,0.08)' },
+                                            form.category === cat.key && { backgroundColor: cat.color, borderColor: cat.color }]}
+                                            onPress={() => setForm(f => ({ ...f, category: cat.key }))}>
+                                            <MaterialCommunityIcons name={cat.icon} size={18} color={form.category === cat.key ? '#FFF' : cat.color} />
+                                            <Text style={[s.catChipText, { color: 'rgba(255,255,255,0.8)' }, form.category === cat.key && { color: '#FFF' }]}>{cat.label}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                                <View style={[s.modalForm, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
+                                    <View style={[s.modalInputRow, { borderBottomColor: 'rgba(255,255,255,0.12)' }]}>
+                                        <MaterialCommunityIcons name="format-title" size={20} color={colors.primary} />
+                                        <TextInput style={[s.modalInput, { color: '#FFFFFF' }]} placeholder="Başlık *" placeholderTextColor="rgba(255,255,255,0.4)" value={form.title} onChangeText={v => setForm(f => ({ ...f, title: v }))} />
+                                    </View>
+                                    <View style={{ padding: SPACING.md }}>
+                                        <DatePickerInput
+                                            placeholder="Tarih"
+                                            value={parseDateString(form.date)}
+                                            onChange={d => setForm(f => ({ ...f, date: formatDateString(d) }))}
+                                        />
+                                    </View>
+                                    <View style={[s.modalInputRow, { borderBottomColor: 'rgba(255,255,255,0.12)', minHeight: 80, alignItems: 'flex-start', paddingTop: 14 }]}>
+                                        <MaterialCommunityIcons name="note-text" size={20} color="rgba(255,255,255,0.5)" style={{ marginTop: 2 }} />
+                                        <TextInput style={[s.modalInput, { color: '#FFFFFF', textAlignVertical: 'top' }]} placeholder="Notlar" placeholderTextColor="rgba(255,255,255,0.4)" value={form.notes} multiline numberOfLines={3} onChangeText={v => setForm(f => ({ ...f, notes: v }))} />
+                                    </View>
+                                </View>
+                            </ScrollView>
+                            <TouchableOpacity style={[s.modalSaveButton, { backgroundColor: '#3498DB' }]} onPress={handleAdd}>
+                                <MaterialCommunityIcons name="check-circle" size={22} color="#FFF" />
+                                <Text style={s.modalSaveText}>Kaydet</Text>
                             </TouchableOpacity>
                         </View>
-
-                        <Text style={[s.modalLabel, { color: colors.text }]}>Kategori</Text>
-                        <View style={s.catGrid}>
-                            {CATEGORIES.map(cat => (
-                                <TouchableOpacity key={cat.key}
-                                    style={[s.catChip, { borderColor: colors.border, backgroundColor: colors.background },
-                                    form.category === cat.key && { backgroundColor: cat.color, borderColor: cat.color }]}
-                                    onPress={() => setForm(f => ({ ...f, category: cat.key }))}>
-                                    <MaterialCommunityIcons name={cat.icon} size={18} color={form.category === cat.key ? '#FFF' : cat.color} />
-                                    <Text style={[s.catChipText, { color: colors.text }, form.category === cat.key && { color: '#FFF' }]}>{cat.label}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-
-                        <View style={[s.modalForm, { backgroundColor: colors.background }]}>
-                            <View style={[s.modalInputRow, { borderBottomColor: colors.divider }]}>
-                                <MaterialCommunityIcons name="format-title" size={20} color={colors.primary} />
-                                <TextInput style={[s.modalInput, { color: colors.text }]} placeholder="Başlık *" placeholderTextColor={colors.textLight} value={form.title} onChangeText={v => setForm(f => ({ ...f, title: v }))} />
-                            </View>
-                            <View style={[s.modalInputRow, { borderBottomColor: colors.divider }]}>
-                                <MaterialCommunityIcons name="calendar" size={20} color={colors.info} />
-                                <TextInput style={[s.modalInput, { color: colors.text }]} placeholder="Tarih (GG.AA.YYYY)" placeholderTextColor={colors.textLight} value={form.date} onChangeText={v => setForm(f => ({ ...f, date: v }))} />
-                            </View>
-                            <View style={[s.modalInputRow, { borderBottomColor: colors.divider, minHeight: 80, alignItems: 'flex-start', paddingTop: 14 }]}>
-                                <MaterialCommunityIcons name="note-text" size={20} color={colors.textSecondary} style={{ marginTop: 2 }} />
-                                <TextInput style={[s.modalInput, { color: colors.text, textAlignVertical: 'top' }]} placeholder="Notlar" placeholderTextColor={colors.textLight} value={form.notes} multiline numberOfLines={3} onChangeText={v => setForm(f => ({ ...f, notes: v }))} />
-                            </View>
-                        </View>
-
-                        <TouchableOpacity style={[s.modalSaveButton, { backgroundColor: colors.info }, shadows.medium]} onPress={handleAdd}>
-                            <MaterialCommunityIcons name="check-circle" size={22} color="#FFF" />
-                            <Text style={s.modalSaveText}>Kaydet</Text>
-                        </TouchableOpacity>
                     </View>
-                </View>
-            </Modal>
-        </SafeAreaView>
+                </Modal>
+            </SafeAreaView>
+        </GlassBackground>
     );
 }
 
-const makeStyles = (colors, shadows) => StyleSheet.create({
+const s = StyleSheet.create({
     container: { flex: 1 },
     categoryRow: { flexDirection: 'row', paddingHorizontal: SPACING.md, paddingTop: SPACING.md, gap: SPACING.sm },
-    categoryCard: { flex: 1, alignItems: 'center', paddingVertical: SPACING.sm, borderRadius: RADIUS.md, gap: 2 },
+    categoryCardOuter: { flex: 1 },
+    categoryCardInner: { alignItems: 'center', paddingVertical: SPACING.sm, gap: 2 },
     categoryCount: { fontSize: 16, fontWeight: '800' },
     listContent: { padding: SPACING.md, paddingBottom: 100 },
-    card: { flexDirection: 'row', borderRadius: RADIUS.lg, marginBottom: SPACING.sm, padding: SPACING.md },
+    cardOuter: { marginBottom: SPACING.sm, overflow: 'hidden', width: '100%' },
+    cardInner: { flexDirection: 'row', padding: SPACING.md },
     cardIcon: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
     cardContent: { flex: 1 },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    cardTitle: { fontSize: 15, fontWeight: '700', flex: 1, marginRight: 8 },
+    cardTitle: { fontSize: 15, fontWeight: '700', flex: 1, marginRight: 8, color: '#FFF' },
     cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
     categoryBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.full },
     categoryText: { fontSize: 11, fontWeight: '600' },
-    dateText: { fontSize: 12 },
-    notesText: { fontSize: 13, marginTop: 6, lineHeight: 20 },
+    dateText: { fontSize: 12, color: 'rgba(255,255,255,0.55)' },
+    notesText: { fontSize: 13, marginTop: 6, lineHeight: 20, color: 'rgba(255,255,255,0.5)' },
     emptyContainer: { alignItems: 'center', paddingTop: 80 },
-    emptyText: { fontSize: 15, marginTop: SPACING.md },
-    fab: { position: 'absolute', right: SPACING.lg, bottom: SPACING.xl, width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
+    emptyText: { fontSize: 15, marginTop: SPACING.md, color: 'rgba(255,255,255,0.4)' },
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
     modalContent: { borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.lg, maxHeight: '85%' },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },

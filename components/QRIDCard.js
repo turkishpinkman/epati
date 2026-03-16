@@ -1,9 +1,10 @@
 // QRIDCard.js — QR Kodlu Dijital Pet Kimlik Kartı
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Rect } from 'react-native-svg';
 import { useTheme, PET_TYPE_ICONS, getPetColor, SPACING, RADIUS } from '../utils/theme';
+import { getTelegramFileUrl } from '../utils/telegram';
 
 // Basit QR benzeri pattern (gerçek QR yerine dekoratif grid)
 function QRPattern({ data, size, color }) {
@@ -46,6 +47,13 @@ export default function QRIDCard({ pet }) {
     const typeInfo = PET_TYPE_ICONS[pet.type] || PET_TYPE_ICONS['Diğer'];
     const petColor = getPetColor(pet.type, colors);
     const qrData = `epati:${pet.id || ''}:${pet.name || ''}:${pet.type || ''}`;
+    const [photoUrl, setPhotoUrl] = useState(null);
+
+    useEffect(() => {
+        if (pet.photo) {
+            getTelegramFileUrl(pet.photo).then(url => setPhotoUrl(url)).catch(() => setPhotoUrl(null));
+        }
+    }, [pet.photo]);
 
     const getAge = () => {
         if (!pet.birthDate) return '—';
@@ -71,8 +79,8 @@ export default function QRIDCard({ pet }) {
             <View style={styles.body}>
                 {/* Sol: Fotoğraf ve QR */}
                 <View style={styles.leftCol}>
-                    {pet.photo ? (
-                        <Image source={{ uri: pet.photo }} style={[styles.photo, { borderColor: petColor + '40' }]} />
+                    {photoUrl ? (
+                        <Image source={{ uri: photoUrl }} style={[styles.photo, { borderColor: petColor + '40' }]} />
                     ) : (
                         <View style={[styles.photoPlaceholder, { backgroundColor: petColor + '15', borderColor: petColor + '30' }]}>
                             <MaterialCommunityIcons name={typeInfo.icon} size={32} color={petColor} />

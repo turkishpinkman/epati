@@ -1,16 +1,20 @@
-// VaccinationsScreen.js — Aşı Takvimi
-import React, { useState, useCallback } from 'react';
+// VaccinationsScreen.js — Aşı Takvimi (Liquid Glass)
+import React, { useState, useCallback, useEffect } from 'react';
 import {
     View, Text, FlatList, TouchableOpacity, TextInput,
-    StyleSheet, Modal, Alert
+    StyleSheet, Modal, Alert, ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, SPACING, RADIUS } from '../utils/theme';
-import { loadPets, addVaccination, deleteVaccination } from '../utils/storage';
+import { loadVaccinations, addVaccination, deleteVaccination } from '../utils/storage';
+import DatePickerInput from '../components/DatePickerInput';
+import { parseDateString, formatDateString } from '../utils/dateHelpers';
+import GlassBackground from '../components/GlassBackground';
+import GlassPanel from '../components/GlassPanel';
 
-export default function VaccinationsScreen({ route }) {
+export default function VaccinationsScreen({ route, navigation }) {
     const { petId, petName } = route.params;
     const { colors, shadows } = useTheme();
     const [vaccinations, setVaccinations] = useState([]);
@@ -18,17 +22,25 @@ export default function VaccinationsScreen({ route }) {
     const [form, setForm] = useState({ name: '', date: '', veterinarian: '', nextDate: '', notes: '' });
 
     const fetchData = async () => {
-        const pets = await loadPets();
-        const pet = pets.find(p => p.id === petId);
-        if (pet) {
-            const sorted = [...(pet.vaccinations || [])].sort((a, b) =>
-                new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt)
-            );
-            setVaccinations(sorted);
-        }
+        const data = await loadVaccinations(petId);
+        const sorted = [...data].sort((a, b) => {
+            const dateA = a.date ? parseDateString(a.date) : new Date(a.createdAt);
+            const dateB = b.date ? parseDateString(b.date) : new Date(b.createdAt);
+            return (dateB || new Date(0)) - (dateA || new Date(0));
+        });
+        setVaccinations(sorted);
     };
 
     useFocusEffect(useCallback(() => { fetchData(); }, [petId]));
+
+    // Tab bar + menüsünden gelince modalı otomatik aç
+    useEffect(() => {
+        if (route.params?.openModal) {
+            setModalVisible(true);
+            // Paramı temizle ki geri dönüp tekrar açmasIn
+            if (navigation.setParams) navigation.setParams({ openModal: false });
+        }
+    }, [route.params?.openModal]);
 
     const handleAdd = async () => {
         if (!form.name.trim()) { Alert.alert('Hata', 'Aşı adını girin.'); return; }
@@ -45,128 +57,153 @@ export default function VaccinationsScreen({ route }) {
         ]);
     };
 
-    const isUpcoming = (dateStr) => dateStr && new Date(dateStr) > new Date();
-
-    const s = makeStyles(colors, shadows);
+    const isUpcoming = (dateStr) => {
+        if (!dateStr) return false;
+        const parsed = parseDateString(dateStr);
+        return parsed && parsed > new Date();
+    };
 
     return (
-        <SafeAreaView style={[s.container, { backgroundColor: colors.background }]} edges={['bottom']}>
-            <View style={s.summaryRow}>
-                <View style={[s.summaryCard, { backgroundColor: colors.success + '15' }]}>
-                    <MaterialCommunityIcons name="check-circle" size={22} color={colors.success} />
-                    <Text style={[s.summaryValue, { color: colors.success }]}>{vaccinations.length}</Text>
-                    <Text style={[s.summaryLabel, { color: colors.textSecondary }]}>Yapılan</Text>
+        <GlassBackground>
+            <SafeAreaView style={s.container} edges={['bottom']}>
+                <View style={{ height: 60 }} />
+                {/* Özet */}
+                <View style={s.summaryRow}>
+                    <GlassPanel borderRadius={RADIUS.lg} style={s.summaryCardOuter} noPadding>
+                        <View style={s.summaryCardInner}>
+                            <MaterialCommunityIcons name="check-circle" size={22} color="#2ECC71" />
+                            <Text style={s.summaryValue}>{vaccinations.length}</Text>
+                            <Text style={s.summaryLabel}>Yapılan</Text>
+                        </View>
+                    </GlassPanel>
+                    <GlassPanel borderRadius={RADIUS.lg} style={s.summaryCardOuter} noPadding>
+                        <View style={s.summaryCardInner}>
+                            <MaterialCommunityIcons name="clock-alert" size={22} color="#F39C12" />
+                            <Text style={[s.summaryValue, { color: '#F39C12' }]}>{vaccinations.filter(v => isUpcoming(v.nextDate)).length}</Text>
+                            <Text style={s.summaryLabel}>Yaklaşan</Text>
+                        </View>
+                    </GlassPanel>
                 </View>
-                <View style={[s.summaryCard, { backgroundColor: colors.warning + '15' }]}>
-                    <MaterialCommunityIcons name="clock-alert" size={22} color={colors.warning} />
-                    <Text style={[s.summaryValue, { color: colors.warning }]}>{vaccinations.filter(v => isUpcoming(v.nextDate)).length}</Text>
-                    <Text style={[s.summaryLabel, { color: colors.textSecondary }]}>Yaklaşan</Text>
-                </View>
-            </View>
 
-            <FlatList
-                data={vaccinations}
-                renderItem={({ item }) => (
-                    <View style={[s.card, { backgroundColor: colors.surface }, shadows.small]}>
-                        <View style={[s.cardIndicator, { backgroundColor: isUpcoming(item.nextDate) ? colors.warning : colors.success }]} />
-                        <View style={s.cardContent}>
-                            <View style={s.cardHeader}>
-                                <Text style={[s.cardTitle, { color: colors.text }]}>{item.name}</Text>
-                                <TouchableOpacity onPress={() => handleDelete(item.id, item.name)}>
-                                    <MaterialCommunityIcons name="close-circle" size={20} color={colors.textLight} />
+                <FlatList
+                    data={vaccinations}
+                    renderItem={({ item }) => (
+                        <GlassPanel borderRadius={RADIUS.lg} noPadding style={s.cardOuter}>
+                            <View style={s.cardInner}>
+                                <View style={[s.cardIndicator, { backgroundColor: isUpcoming(item.nextDate) ? '#F39C12' : '#2ECC71' }]} />
+                                <View style={s.cardContent}>
+                                    <View style={s.cardHeader}>
+                                        <Text style={s.cardTitle}>{item.name}</Text>
+                                        <TouchableOpacity onPress={() => handleDelete(item.id, item.name)}>
+                                            <MaterialCommunityIcons name="close-circle" size={20} color="rgba(255,255,255,0.4)" />
+                                        </TouchableOpacity>
+                                    </View>
+                                    {item.date ? (
+                                        <View style={s.cardRow}>
+                                            <MaterialCommunityIcons name="calendar-check" size={16} color="#2ECC71" />
+                                            <Text style={s.cardRowText}>Yapıldı: {item.date}</Text>
+                                        </View>
+                                    ) : null}
+                                    {item.nextDate ? (
+                                        <View style={s.cardRow}>
+                                            <MaterialCommunityIcons name="calendar-clock" size={16} color={isUpcoming(item.nextDate) ? '#F39C12' : 'rgba(255,255,255,0.4)'} />
+                                            <Text style={[s.cardRowText, isUpcoming(item.nextDate) && { color: '#F39C12', fontWeight: '600' }]}>
+                                                Sonraki: {item.nextDate}
+                                            </Text>
+                                        </View>
+                                    ) : null}
+                                    {item.veterinarian ? (
+                                        <View style={s.cardRow}>
+                                            <MaterialCommunityIcons name="doctor" size={16} color="#3498DB" />
+                                            <Text style={s.cardRowText}>{item.veterinarian}</Text>
+                                        </View>
+                                    ) : null}
+                                    {item.notes ? <Text style={s.cardNotes}>{item.notes}</Text> : null}
+                                </View>
+                            </View>
+                        </GlassPanel>
+                    )}
+                    keyExtractor={item => item.id}
+                    contentContainerStyle={s.listContent}
+                    ListEmptyComponent={
+                        <View style={s.emptyContainer}>
+                            <MaterialCommunityIcons name="needle" size={48} color="rgba(255,255,255,0.3)" />
+                            <Text style={s.emptyText}>Henüz aşı kaydı yok</Text>
+                        </View>
+                    }
+                    showsVerticalScrollIndicator={false}
+                />
+
+
+                <Modal visible={modalVisible} animationType="slide" transparent>
+                    <View style={s.modalOverlay}>
+                        <View style={[s.modalContent, { backgroundColor: 'rgba(30,30,50,0.95)' }]}>
+                            <View style={s.modalHeader}>
+                                <Text style={[s.modalTitle, { color: '#FFFFFF' }]}>Yeni Aşı Kaydı</Text>
+                                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                                    <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
                                 </TouchableOpacity>
                             </View>
-                            {item.date ? (
-                                <View style={s.cardRow}>
-                                    <MaterialCommunityIcons name="calendar-check" size={16} color={colors.success} />
-                                    <Text style={[s.cardRowText, { color: colors.textSecondary }]}>Yapıldı: {item.date}</Text>
+                            <ScrollView>
+                                <View style={[s.modalForm, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
+                                    <View style={[s.modalInputRow, { borderBottomColor: 'rgba(255,255,255,0.12)' }]}>
+                                        <MaterialCommunityIcons name="needle" size={20} color={colors.secondary} />
+                                        <TextInput style={[s.modalInput, { color: '#FFFFFF' }]} placeholder="Aşı adı *" placeholderTextColor="rgba(255,255,255,0.4)" value={form.name} onChangeText={v => setForm(f => ({ ...f, name: v }))} />
+                                    </View>
+                                    <View style={{ padding: SPACING.md }}>
+                                        <DatePickerInput
+                                            placeholder="Yapılma tarihi"
+                                            value={parseDateString(form.date)}
+                                            onChange={d => setForm(f => ({ ...f, date: formatDateString(d) }))}
+                                        />
+                                        <View style={{ height: SPACING.sm }} />
+                                        <DatePickerInput
+                                            placeholder="Sonraki tarih"
+                                            value={parseDateString(form.nextDate)}
+                                            onChange={d => setForm(f => ({ ...f, nextDate: formatDateString(d) }))}
+                                        />
+                                    </View>
+                                    <View style={[s.modalInputRow, { borderBottomColor: 'rgba(255,255,255,0.12)' }]}>
+                                        <MaterialCommunityIcons name="doctor" size={20} color={colors.info} />
+                                        <TextInput style={[s.modalInput, { color: '#FFFFFF' }]} placeholder="Veteriner" placeholderTextColor="rgba(255,255,255,0.4)" value={form.veterinarian} onChangeText={v => setForm(f => ({ ...f, veterinarian: v }))} />
+                                    </View>
+                                    <View style={[s.modalInputRow, { borderBottomColor: 'rgba(255,255,255,0.12)' }]}>
+                                        <MaterialCommunityIcons name="note-text" size={20} color="rgba(255,255,255,0.5)" />
+                                        <TextInput style={[s.modalInput, { color: '#FFFFFF' }]} placeholder="Notlar" placeholderTextColor="rgba(255,255,255,0.4)" value={form.notes} onChangeText={v => setForm(f => ({ ...f, notes: v }))} />
+                                    </View>
                                 </View>
-                            ) : null}
-                            {item.nextDate ? (
-                                <View style={s.cardRow}>
-                                    <MaterialCommunityIcons name="calendar-clock" size={16} color={isUpcoming(item.nextDate) ? colors.warning : colors.textLight} />
-                                    <Text style={[s.cardRowText, { color: colors.textSecondary }, isUpcoming(item.nextDate) && { color: colors.warning, fontWeight: '600' }]}>
-                                        Sonraki: {item.nextDate}
-                                    </Text>
-                                </View>
-                            ) : null}
-                            {item.veterinarian ? (
-                                <View style={s.cardRow}>
-                                    <MaterialCommunityIcons name="doctor" size={16} color={colors.info} />
-                                    <Text style={[s.cardRowText, { color: colors.textSecondary }]}>{item.veterinarian}</Text>
-                                </View>
-                            ) : null}
-                            {item.notes ? <Text style={[s.cardNotes, { color: colors.textLight }]}>{item.notes}</Text> : null}
-                        </View>
-                    </View>
-                )}
-                keyExtractor={item => item.id}
-                contentContainerStyle={s.listContent}
-                ListEmptyComponent={
-                    <View style={s.emptyContainer}>
-                        <MaterialCommunityIcons name="needle" size={48} color={colors.textLight} />
-                        <Text style={[s.emptyText, { color: colors.textLight }]}>Henüz aşı kaydı yok</Text>
-                    </View>
-                }
-                showsVerticalScrollIndicator={false}
-            />
-
-            <TouchableOpacity style={[s.fab, { backgroundColor: colors.secondary }, shadows.large]} onPress={() => setModalVisible(true)}>
-                <MaterialCommunityIcons name="plus" size={28} color="#FFF" />
-            </TouchableOpacity>
-
-            <Modal visible={modalVisible} animationType="slide" transparent>
-                <View style={s.modalOverlay}>
-                    <View style={[s.modalContent, { backgroundColor: colors.surface }]}>
-                        <View style={s.modalHeader}>
-                            <Text style={[s.modalTitle, { color: colors.text }]}>Yeni Aşı Kaydı</Text>
-                            <TouchableOpacity onPress={() => setModalVisible(false)}>
-                                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
+                            </ScrollView>
+                            <TouchableOpacity style={[s.modalSaveButton, { backgroundColor: '#FF6B6B' }]} onPress={handleAdd}>
+                                <MaterialCommunityIcons name="check-circle" size={22} color="#FFF" />
+                                <Text style={s.modalSaveText}>Kaydet</Text>
                             </TouchableOpacity>
                         </View>
-                        <View style={[s.modalForm, { backgroundColor: colors.background }]}>
-                            {[
-                                { icon: 'needle', color: colors.secondary, placeholder: 'Aşı adı *', key: 'name' },
-                                { icon: 'calendar-check', color: colors.success, placeholder: 'Yapılma tarihi (GG.AA.YYYY)', key: 'date' },
-                                { icon: 'calendar-clock', color: colors.warning, placeholder: 'Sonraki tarih (GG.AA.YYYY)', key: 'nextDate' },
-                                { icon: 'doctor', color: colors.info, placeholder: 'Veteriner', key: 'veterinarian' },
-                                { icon: 'note-text', color: colors.textSecondary, placeholder: 'Notlar', key: 'notes' },
-                            ].map((field, i) => (
-                                <View key={i} style={[s.modalInputRow, { borderBottomColor: colors.divider }]}>
-                                    <MaterialCommunityIcons name={field.icon} size={20} color={field.color} />
-                                    <TextInput style={[s.modalInput, { color: colors.text }]} placeholder={field.placeholder} placeholderTextColor={colors.textLight} value={form[field.key]} onChangeText={v => setForm(f => ({ ...f, [field.key]: v }))} />
-                                </View>
-                            ))}
-                        </View>
-                        <TouchableOpacity style={[s.modalSaveButton, { backgroundColor: colors.secondary }, shadows.medium]} onPress={handleAdd}>
-                            <MaterialCommunityIcons name="check-circle" size={22} color="#FFF" />
-                            <Text style={s.modalSaveText}>Kaydet</Text>
-                        </TouchableOpacity>
                     </View>
-                </View>
-            </Modal>
-        </SafeAreaView>
+                </Modal>
+            </SafeAreaView>
+        </GlassBackground>
     );
 }
 
-const makeStyles = (colors, shadows) => StyleSheet.create({
+const s = StyleSheet.create({
     container: { flex: 1 },
     summaryRow: { flexDirection: 'row', paddingHorizontal: SPACING.md, paddingTop: SPACING.md, gap: SPACING.sm },
-    summaryCard: { flex: 1, alignItems: 'center', paddingVertical: SPACING.md, borderRadius: RADIUS.lg, gap: 4 },
-    summaryValue: { fontSize: 22, fontWeight: '800' },
-    summaryLabel: { fontSize: 12, fontWeight: '600' },
+    summaryCardOuter: { flex: 1 },
+    summaryCardInner: { alignItems: 'center', paddingVertical: SPACING.sm, gap: 4 },
+    summaryValue: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
+    summaryLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.55)' },
     listContent: { padding: SPACING.md, paddingBottom: 100 },
-    card: { flexDirection: 'row', borderRadius: RADIUS.lg, marginBottom: SPACING.sm, overflow: 'hidden' },
+    cardOuter: { marginBottom: SPACING.sm, overflow: 'hidden', width: '100%' },
+    cardInner: { flexDirection: 'row' },
     cardIndicator: { width: 4 },
     cardContent: { flex: 1, padding: SPACING.md },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    cardTitle: { fontSize: 16, fontWeight: '700' },
+    cardTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
     cardRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
-    cardRowText: { fontSize: 13 },
-    cardNotes: { fontSize: 12, marginTop: 6, fontStyle: 'italic' },
+    cardRowText: { fontSize: 13, color: 'rgba(255,255,255,0.6)' },
+    cardNotes: { fontSize: 12, marginTop: 6, fontStyle: 'italic', color: 'rgba(255,255,255,0.45)' },
     emptyContainer: { alignItems: 'center', paddingTop: 80 },
-    emptyText: { fontSize: 15, marginTop: SPACING.md },
-    fab: { position: 'absolute', right: SPACING.lg, bottom: SPACING.xl, width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
+    emptyText: { fontSize: 15, marginTop: SPACING.md, color: 'rgba(255,255,255,0.4)' },
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
     modalContent: { borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.lg, maxHeight: '80%' },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },

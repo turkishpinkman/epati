@@ -1,5 +1,5 @@
-// WeightScreen.js — Kilo Takibi ve Grafiği
-import React, { useState, useCallback } from 'react';
+// WeightScreen.js — Kilo Takibi ve Grafiği (Liquid Glass)
+import React, { useState, useCallback, useEffect } from 'react';
 import {
     View, Text, FlatList, TouchableOpacity, TextInput,
     StyleSheet, Modal, Alert, Dimensions
@@ -9,13 +9,17 @@ import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Polyline, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { useTheme, SPACING, RADIUS } from '../utils/theme';
-import { loadPets, addWeightEntry, deleteWeightEntry } from '../utils/storage';
+import { loadWeightHistory, addWeightEntry, deleteWeightEntry } from '../utils/storage';
+import DatePickerInput from '../components/DatePickerInput';
+import { parseDateString, formatDateString } from '../utils/dateHelpers';
+import GlassBackground from '../components/GlassBackground';
+import GlassPanel from '../components/GlassPanel';
 
 const CHART_W = Dimensions.get('window').width - 64;
 const CHART_H = 180;
 const CHART_PAD = { top: 20, right: 20, bottom: 30, left: 40 };
 
-export default function WeightScreen({ route }) {
+export default function WeightScreen({ route, navigation }) {
     const { petId, petName } = route.params;
     const { colors, shadows } = useTheme();
     const [entries, setEntries] = useState([]);
@@ -23,21 +27,27 @@ export default function WeightScreen({ route }) {
     const [form, setForm] = useState({ weight: '', date: '' });
 
     const fetchData = async () => {
-        const pets = await loadPets();
-        const pet = pets.find(p => p.id === petId);
-        if (pet) {
-            const sorted = [...(pet.weightHistory || [])].sort((a, b) =>
-                new Date(a.date || a.createdAt) - new Date(b.date || b.createdAt)
-            );
-            setEntries(sorted);
-        }
+        const data = await loadWeightHistory(petId);
+        const sorted = [...data].sort((a, b) => {
+            const dateA = a.date ? parseDateString(a.date) : new Date(a.createdAt);
+            const dateB = b.date ? parseDateString(b.date) : new Date(b.createdAt);
+            return (dateA || new Date(0)) - (dateB || new Date(0));
+        });
+        setEntries(sorted);
     };
 
     useFocusEffect(useCallback(() => { fetchData(); }, [petId]));
 
+    useEffect(() => {
+        if (route.params?.openModal) {
+            setModalVisible(true);
+            if (navigation.setParams) navigation.setParams({ openModal: false });
+        }
+    }, [route.params?.openModal]);
+
     const handleAdd = async () => {
         if (!form.weight.trim()) { Alert.alert('Hata', 'Kilo girin.'); return; }
-        await addWeightEntry(petId, { weight: form.weight, date: form.date || new Date().toLocaleDateString('tr-TR') });
+        await addWeightEntry(petId, { weight: form.weight, date: form.date || formatDateString(new Date()) });
         setForm({ weight: '', date: '' });
         setModalVisible(false);
         fetchData();
@@ -70,7 +80,6 @@ export default function WeightScreen({ route }) {
 
         const polylinePoints = points.map(p => `${p.x},${p.y}`).join(' ');
 
-        // Grid çizgileri
         const gridLines = 4;
         const gridLinesArr = [];
         for (let i = 0; i <= gridLines; i++) {
@@ -80,126 +89,137 @@ export default function WeightScreen({ route }) {
         }
 
         return (
-            <View style={[s.chartContainer, { backgroundColor: colors.surface }, shadows.medium]}>
-                <Text style={[s.chartTitle, { color: colors.text }]}>Kilo Değişimi</Text>
-                <Svg width={CHART_W} height={CHART_H}>
-                    {gridLinesArr.map((g, i) => (
-                        <React.Fragment key={i}>
-                            <Line x1={CHART_PAD.left} y1={g.y} x2={CHART_W - CHART_PAD.right} y2={g.y} stroke={colors.divider} strokeWidth={1} />
-                            <SvgText x={CHART_PAD.left - 6} y={g.y + 4} fill={colors.textLight} fontSize={10} textAnchor="end">{g.val}</SvgText>
-                        </React.Fragment>
-                    ))}
-                    <Polyline points={polylinePoints} fill="none" stroke={colors.primary} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-                    {points.map((p, i) => (
-                        <Circle key={i} cx={p.x} cy={p.y} r={4} fill={colors.primary} stroke={colors.surface} strokeWidth={2} />
-                    ))}
-                </Svg>
-                <Text style={[s.chartUnit, { color: colors.textLight }]}>kg</Text>
-            </View>
+            <GlassPanel borderRadius={RADIUS.lg} style={s.chartOuter} noPadding>
+                <View style={s.chartInner}>
+                    <Text style={s.chartTitle}>Kilo Değişimi</Text>
+                    <Svg width={CHART_W} height={CHART_H}>
+                        {gridLinesArr.map((g, i) => (
+                            <React.Fragment key={i}>
+                                <Line x1={CHART_PAD.left} y1={g.y} x2={CHART_W - CHART_PAD.right} y2={g.y} stroke="rgba(255,255,255,0.15)" strokeWidth={1} />
+                                <SvgText x={CHART_PAD.left - 6} y={g.y + 4} fill="rgba(255,255,255,0.5)" fontSize={10} textAnchor="end">{g.val}</SvgText>
+                            </React.Fragment>
+                        ))}
+                        <Polyline points={polylinePoints} fill="none" stroke="#FF6B6B" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+                        {points.map((p, i) => (
+                            <Circle key={i} cx={p.x} cy={p.y} r={4} fill="#FF6B6B" stroke="rgba(255,255,255,0.8)" strokeWidth={2} />
+                        ))}
+                    </Svg>
+                    <Text style={s.chartUnit}>kg</Text>
+                </View>
+            </GlassPanel>
         );
     };
 
-    const s = makeStyles(colors, shadows);
-
     return (
-        <SafeAreaView style={[s.container, { backgroundColor: colors.background }]} edges={['bottom']}>
-            {/* Özet */}
-            <View style={s.summaryRow}>
-                <View style={[s.summaryCard, { backgroundColor: colors.primary + '15' }]}>
-                    <MaterialCommunityIcons name="scale-bathroom" size={22} color={colors.primary} />
-                    <Text style={[s.summaryValue, { color: colors.primary }]}>
-                        {entries.length > 0 ? `${entries[entries.length - 1].weight}` : '—'}
-                    </Text>
-                    <Text style={[s.summaryLabel, { color: colors.textSecondary }]}>Son Kilo (kg)</Text>
-                </View>
-                <View style={[s.summaryCard, { backgroundColor: colors.secondary + '15' }]}>
-                    <MaterialCommunityIcons name="chart-line" size={22} color={colors.secondary} />
-                    <Text style={[s.summaryValue, { color: colors.secondary }]}>{entries.length}</Text>
-                    <Text style={[s.summaryLabel, { color: colors.textSecondary }]}>Kayıt</Text>
-                </View>
-            </View>
-
-            {renderChart()}
-
-            <FlatList
-                data={[...entries].reverse()}
-                renderItem={({ item }) => (
-                    <View style={[s.card, { backgroundColor: colors.surface }, shadows.small]}>
-                        <View style={[s.cardIconBg, { backgroundColor: colors.primary + '15' }]}>
-                            <MaterialCommunityIcons name="weight-kilogram" size={22} color={colors.primary} />
+        <GlassBackground>
+            <SafeAreaView style={s.container} edges={['bottom']}>
+                <View style={{ height: 60 }} />
+                {/* Özet */}
+                <View style={s.summaryRow}>
+                    <GlassPanel borderRadius={RADIUS.lg} style={s.summaryCardOuter} noPadding>
+                        <View style={s.summaryCardInner}>
+                            <MaterialCommunityIcons name="scale-bathroom" size={22} color="#FF6B6B" />
+                            <Text style={s.summaryValue}>
+                                {entries.length > 0 ? `${entries[entries.length - 1].weight}` : '—'}
+                            </Text>
+                            <Text style={s.summaryLabel}>Son Kilo (kg)</Text>
                         </View>
-                        <View style={s.cardContent}>
-                            <Text style={[s.cardWeight, { color: colors.text }]}>{item.weight} kg</Text>
-                            <Text style={[s.cardDate, { color: colors.textSecondary }]}>{item.date || 'Tarih yok'}</Text>
+                    </GlassPanel>
+                    <GlassPanel borderRadius={RADIUS.lg} style={s.summaryCardOuter} noPadding>
+                        <View style={s.summaryCardInner}>
+                            <MaterialCommunityIcons name="chart-line" size={22} color="#A29BFE" />
+                            <Text style={[s.summaryValue, { color: '#A29BFE' }]}>{entries.length}</Text>
+                            <Text style={s.summaryLabel}>Kayıt</Text>
                         </View>
-                        <TouchableOpacity onPress={() => handleDelete(item.id, item.weight)}>
-                            <MaterialCommunityIcons name="close-circle" size={20} color={colors.textLight} />
-                        </TouchableOpacity>
-                    </View>
-                )}
-                keyExtractor={item => item.id}
-                contentContainerStyle={s.listContent}
-                ListEmptyComponent={
-                    <View style={s.emptyContainer}>
-                        <MaterialCommunityIcons name="scale-bathroom" size={48} color={colors.textLight} />
-                        <Text style={[s.emptyText, { color: colors.textLight }]}>Henüz kilo kaydı yok</Text>
-                    </View>
-                }
-                showsVerticalScrollIndicator={false}
-            />
+                    </GlassPanel>
+                </View>
 
-            <TouchableOpacity style={[s.fab, { backgroundColor: colors.primary }, shadows.large]} onPress={() => setModalVisible(true)}>
-                <MaterialCommunityIcons name="plus" size={28} color="#FFF" />
-            </TouchableOpacity>
+                {renderChart()}
 
-            <Modal visible={modalVisible} animationType="slide" transparent>
-                <View style={s.modalOverlay}>
-                    <View style={[s.modalContent, { backgroundColor: colors.surface }]}>
-                        <View style={s.modalHeader}>
-                            <Text style={[s.modalTitle, { color: colors.text }]}>Kilo Kaydı</Text>
-                            <TouchableOpacity onPress={() => setModalVisible(false)}>
-                                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
+                <FlatList
+                    data={[...entries].reverse()}
+                    renderItem={({ item }) => (
+                        <GlassPanel borderRadius={RADIUS.lg} style={s.cardOuter} noPadding>
+                            <View style={s.cardInner}>
+                                <View style={s.cardIconBg}>
+                                    <MaterialCommunityIcons name="weight-kilogram" size={22} color="#FF6B6B" />
+                                </View>
+                                <View style={s.cardContent}>
+                                    <Text style={s.cardWeight}>{item.weight} kg</Text>
+                                    <Text style={s.cardDate}>{item.date || 'Tarih yok'}</Text>
+                                </View>
+                                <TouchableOpacity onPress={() => handleDelete(item.id, item.weight)}>
+                                    <MaterialCommunityIcons name="close-circle" size={20} color="rgba(255,255,255,0.4)" />
+                                </TouchableOpacity>
+                            </View>
+                        </GlassPanel>
+                    )}
+                    keyExtractor={item => item.id}
+                    contentContainerStyle={s.listContent}
+                    ListEmptyComponent={
+                        <View style={s.emptyContainer}>
+                            <MaterialCommunityIcons name="scale-bathroom" size={48} color="rgba(255,255,255,0.3)" />
+                            <Text style={s.emptyText}>Henüz kilo kaydı yok</Text>
+                        </View>
+                    }
+                    showsVerticalScrollIndicator={false}
+                />
+
+
+                <Modal visible={modalVisible} animationType="slide" transparent>
+                    <View style={s.modalOverlay}>
+                        <View style={[s.modalContent, { backgroundColor: 'rgba(30,30,50,0.95)' }]}>
+                            <View style={s.modalHeader}>
+                                <Text style={[s.modalTitle, { color: '#FFFFFF' }]}>Kilo Kaydı</Text>
+                                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                                    <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
+                                </TouchableOpacity>
+                            </View>
+                            <View style={[s.modalForm, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
+                                <View style={[s.modalInputRow, { borderBottomColor: 'rgba(255,255,255,0.12)' }]}>
+                                    <MaterialCommunityIcons name="weight-kilogram" size={20} color={colors.primary} />
+                                    <TextInput style={[s.modalInput, { color: '#FFFFFF' }]} placeholder="Kilo (kg) *" placeholderTextColor="rgba(255,255,255,0.4)" value={form.weight} keyboardType="decimal-pad" onChangeText={v => setForm(f => ({ ...f, weight: v }))} />
+                                </View>
+                                <View style={{ padding: SPACING.md }}>
+                                    <DatePickerInput
+                                        placeholder="Tarih"
+                                        value={parseDateString(form.date)}
+                                        onChange={d => setForm(f => ({ ...f, date: formatDateString(d) }))}
+                                    />
+                                </View>
+                            </View>
+                            <TouchableOpacity style={[s.modalSaveButton, { backgroundColor: '#FF6B6B' }]} onPress={handleAdd}>
+                                <MaterialCommunityIcons name="check-circle" size={22} color="#FFF" />
+                                <Text style={s.modalSaveText}>Kaydet</Text>
                             </TouchableOpacity>
                         </View>
-                        <View style={[s.modalForm, { backgroundColor: colors.background }]}>
-                            <View style={[s.modalInputRow, { borderBottomColor: colors.divider }]}>
-                                <MaterialCommunityIcons name="weight-kilogram" size={20} color={colors.primary} />
-                                <TextInput style={[s.modalInput, { color: colors.text }]} placeholder="Kilo (kg) *" placeholderTextColor={colors.textLight} value={form.weight} keyboardType="decimal-pad" onChangeText={v => setForm(f => ({ ...f, weight: v }))} />
-                            </View>
-                            <View style={[s.modalInputRow, { borderBottomColor: colors.divider }]}>
-                                <MaterialCommunityIcons name="calendar" size={20} color={colors.info} />
-                                <TextInput style={[s.modalInput, { color: colors.text }]} placeholder="Tarih (GG.AA.YYYY)" placeholderTextColor={colors.textLight} value={form.date} onChangeText={v => setForm(f => ({ ...f, date: v }))} />
-                            </View>
-                        </View>
-                        <TouchableOpacity style={[s.modalSaveButton, { backgroundColor: colors.primary }, shadows.medium]} onPress={handleAdd}>
-                            <MaterialCommunityIcons name="check-circle" size={22} color="#FFF" />
-                            <Text style={s.modalSaveText}>Kaydet</Text>
-                        </TouchableOpacity>
                     </View>
-                </View>
-            </Modal>
-        </SafeAreaView>
+                </Modal>
+            </SafeAreaView>
+        </GlassBackground>
     );
 }
 
-const makeStyles = (colors, shadows) => StyleSheet.create({
+const s = StyleSheet.create({
     container: { flex: 1 },
     summaryRow: { flexDirection: 'row', paddingHorizontal: SPACING.md, paddingTop: SPACING.md, gap: SPACING.sm },
-    summaryCard: { flex: 1, alignItems: 'center', paddingVertical: SPACING.md, borderRadius: RADIUS.lg, gap: 4 },
-    summaryValue: { fontSize: 22, fontWeight: '800' },
-    summaryLabel: { fontSize: 12, fontWeight: '600' },
-    chartContainer: { marginHorizontal: SPACING.md, marginTop: SPACING.md, borderRadius: RADIUS.lg, padding: SPACING.md, alignItems: 'center' },
-    chartTitle: { fontSize: 14, fontWeight: '700', marginBottom: SPACING.sm, alignSelf: 'flex-start' },
-    chartUnit: { fontSize: 11, fontWeight: '600', alignSelf: 'flex-end', marginTop: 4 },
+    summaryCardOuter: { flex: 1 },
+    summaryCardInner: { alignItems: 'center', paddingVertical: SPACING.sm, gap: 4 },
+    summaryValue: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
+    summaryLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.55)' },
+    chartOuter: { marginHorizontal: SPACING.md, marginTop: SPACING.md },
+    chartInner: { padding: SPACING.md, alignItems: 'center' },
+    chartTitle: { fontSize: 14, fontWeight: '700', marginBottom: SPACING.sm, alignSelf: 'flex-start', color: '#FFF' },
+    chartUnit: { fontSize: 11, fontWeight: '600', alignSelf: 'flex-end', marginTop: 4, color: 'rgba(255,255,255,0.5)' },
     listContent: { padding: SPACING.md, paddingBottom: 100 },
-    card: { flexDirection: 'row', alignItems: 'center', borderRadius: RADIUS.lg, marginBottom: SPACING.sm, padding: SPACING.md },
-    cardIconBg: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
+    cardOuter: { marginBottom: SPACING.sm, overflow: 'hidden', width: '100%' },
+    cardInner: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md },
+    cardIconBg: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,107,107,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
     cardContent: { flex: 1 },
-    cardWeight: { fontSize: 16, fontWeight: '700' },
-    cardDate: { fontSize: 13, marginTop: 2 },
+    cardWeight: { fontSize: 16, fontWeight: '700', color: '#FFF' },
+    cardDate: { fontSize: 13, marginTop: 2, color: 'rgba(255,255,255,0.55)' },
     emptyContainer: { alignItems: 'center', paddingTop: 60 },
-    emptyText: { fontSize: 15, marginTop: SPACING.md },
-    fab: { position: 'absolute', right: SPACING.lg, bottom: SPACING.xl, width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
+    emptyText: { fontSize: 15, marginTop: SPACING.md, color: 'rgba(255,255,255,0.4)' },
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
     modalContent: { borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.lg },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },

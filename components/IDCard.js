@@ -1,11 +1,19 @@
 // IDCard.js — Dijital Pet Kimlik Kartı Bileşeni
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SHADOWS, RADIUS, SPACING, PET_TYPE_ICONS } from '../utils/theme';
+import { getTelegramFileUrl } from '../utils/telegram';
 
 export default function IDCard({ pet }) {
     const typeInfo = PET_TYPE_ICONS[pet.type] || PET_TYPE_ICONS['Diğer'];
+    const [photoUrl, setPhotoUrl] = useState(null);
+
+    useEffect(() => {
+        if (pet.photo) {
+            getTelegramFileUrl(pet.photo).then(url => setPhotoUrl(url)).catch(() => setPhotoUrl(null));
+        }
+    }, [pet.photo]);
 
     const getAge = () => {
         if (!pet.birthDate) return '—';
@@ -31,8 +39,8 @@ export default function IDCard({ pet }) {
             <View style={styles.body}>
                 {/* Fotoğraf */}
                 <View style={styles.photoSection}>
-                    {pet.photo ? (
-                        <Image source={{ uri: pet.photo }} style={styles.photo} />
+                    {photoUrl ? (
+                        <Image source={{ uri: photoUrl }} style={styles.photo} />
                     ) : (
                         <View style={[styles.photoPlaceholder, { backgroundColor: typeInfo.color + '20' }]}>
                             <MaterialCommunityIcons name={typeInfo.icon} size={40} color={typeInfo.color} />
